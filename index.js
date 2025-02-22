@@ -13,7 +13,7 @@ app.use(cors({
         'https://task-management-f9389.web.app',
 
     ] ,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
     credentials: true,
   }));
   
