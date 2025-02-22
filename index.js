@@ -6,7 +6,11 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 app.use(cors({
-  origin: ['http://localhost:5176'],
+  origin: [
+    'http://localhost:5176',
+    'https://task-management-f9389.web.app/'
+    
+  ],
   credentials: true,
 }));
 app.use(express.json());
@@ -48,28 +52,39 @@ app.get('/tasks', async (req, res) => {
 
 // Add Task
 app.post('/tasks', async (req, res) => {
-  const { title, description, category } = req.body;
-
-  if (!title || !description || !category) {
-    return res.status(400).json({ message: 'All fields (title, description, category) are required' });
-  }
-
-  const timestamp = new Date();
-  const tasksCollection = client.db('taskManagement').collection('tasks');
-
-  // Get current max position in category
-  const lastTask = await tasksCollection.find({ category }).sort({ position: -1 }).limit(1).toArray();
-  const newPosition = lastTask.length > 0 ? lastTask[0].position + 1 : 0;
-
-  const newTask = { title, description, category, timestamp, position: newPosition };
-
-  try {
-    const result = await tasksCollection.insertOne(newTask);
-    res.status(201).json({ _id: result.insertedId, ...newTask });
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
+    const { title, description, category, dueDate } = req.body;
+  
+    if (!title || !description || !category) {
+      return res.status(400).json({ message: 'All fields (title, description, category) are required' });
+    }
+  
+    const timestamp = new Date();
+    const tasksCollection = client.db('taskManagement').collection('tasks');
+  
+    // Get current max position in category
+    const lastTask = await tasksCollection.find({ category }).sort({ position: -1 }).limit(1).toArray();
+    const newPosition = lastTask.length > 0 ? lastTask[0].position + 1 : 0;
+  
+    // Parse `dueDate`, store as Date object if provided, otherwise null
+    const parsedDueDate = dueDate ? new Date(dueDate) : null;
+  
+    const newTask = {
+      title,
+      description,
+      category,
+      timestamp,
+      position: newPosition,
+      dueDate: parsedDueDate,
+    };
+  
+    try {
+      const result = await tasksCollection.insertOne(newTask);
+      res.status(201).json({ _id: result.insertedId, ...newTask });
+    } catch (err) {
+      res.status(500).json({ message: 'Server error', error: err.message });
+    }
+  });
+  
 
 // Update Task Order in Same List
 app.patch('/tasks/order', async (req, res) => {
@@ -121,40 +136,48 @@ app.patch("/tasks/move", async (req, res) => {
 
 // Update Task Details (Title, Description, Category, Position)
 app.patch('/tasks/:id', async (req, res) => {
-  const { title, description, category, position } = req.body;
-  const taskId = req.params.id;
-
-  const updatedFields = {};
-  if (title) updatedFields.title = title;
-  if (description) updatedFields.description = description;
-  if (category) updatedFields.category = category;
-  if (position !== undefined) updatedFields.position = position;
-
-  if (Object.keys(updatedFields).length === 0) {
-    return res.status(400).json({ message: 'At least one field must be provided to update.' });
-  }
-
-  try {
-    const tasksCollection = client.db('taskManagement').collection('tasks');
-
-    if (!ObjectId.isValid(taskId)) {
-      return res.status(400).json({ message: 'Invalid task ID' });
+    const { title, description, category, position, dueDate } = req.body;
+    const taskId = req.params.id;
+  
+    const updatedFields = {};
+    if (title) updatedFields.title = title;
+    if (description) updatedFields.description = description;
+    if (category) updatedFields.category = category;
+    if (position !== undefined) updatedFields.position = position;
+    if (dueDate) {
+      // Optional: Add validation for dueDate format (e.g., ISO 8601 date format)
+      if (isNaN(new Date(dueDate).getTime())) {
+        return res.status(400).json({ message: 'Invalid due date format' });
+      }
+      updatedFields.dueDate = new Date(dueDate); // Convert to Date object
     }
-
-    const result = await tasksCollection.updateOne(
-      { _id: new ObjectId(taskId) },
-      { $set: updatedFields }
-    );
-
-    if (result.modifiedCount === 0) {
-      return res.status(404).json({ message: 'Task not found or no changes made' });
+  
+    if (Object.keys(updatedFields).length === 0) {
+      return res.status(400).json({ message: 'At least one field must be provided to update.' });
     }
-
-    res.json({ message: 'Task updated successfully' });
-  } catch (err) {
-    res.status(400).json({ message: 'Error updating task', error: err.message });
-  }
-});
+  
+    try {
+      const tasksCollection = client.db('taskManagement').collection('tasks');
+  
+      if (!ObjectId.isValid(taskId)) {
+        return res.status(400).json({ message: 'Invalid task ID' });
+      }
+  
+      const result = await tasksCollection.updateOne(
+        { _id: new ObjectId(taskId) },
+        { $set: updatedFields }
+      );
+  
+      if (result.modifiedCount === 0) {
+        return res.status(404).json({ message: 'Task not found or no changes made' });
+      }
+  
+      res.json({ message: 'Task updated successfully' });
+    } catch (err) {
+      res.status(400).json({ message: 'Error updating task', error: err.message });
+    }
+  });
+  
 
 app.put('/tasks/:id', async (req, res) => {
     const { title, description, category } = req.body;
